@@ -11,7 +11,7 @@
 # that they have been altered from the originals.
 
 """The HHL algorithm."""
-import time
+
 from typing import Optional, Union, List, Callable, Tuple
 import numpy as np
 
@@ -331,10 +331,6 @@ class HHL(LinearSolver):
             ValueError: If the input is not in the correct format.
             ValueError: If the type of the input matrix is not supported.
         """
-        # # 为了让nl能够在之后被读出
-        # global nl
-
-        time_1 = time.perf_counter()
         # State preparation circuit - default is qiskit
         if isinstance(vector, QuantumCircuit):
             nb = vector.num_qubits
@@ -348,11 +344,10 @@ class HHL(LinearSolver):
             vector_circuit.isometry(
                 vector / np.linalg.norm(vector), list(range(nb)), None
             )
-        print("Time taken for state preparation: ",  time.perf_counter() - time_1, "seconds")
+
         # If state preparation is probabilistic the number of qubit flags should increase
         nf = 1
 
-        time_2 = time.perf_counter()
         # Hamiltonian simulation circuit - default is Trotterization
         if isinstance(matrix, QuantumCircuit):
             matrix_circuit = matrix
@@ -377,9 +372,7 @@ class HHL(LinearSolver):
             matrix_circuit = NumPyMatrix(matrix, evolution_time=2 * np.pi)
         else:
             raise ValueError(f"Invalid type for matrix: {type(matrix)}.")
-        
-        print("Time taken for Hamiltonian simulation: ",  time.perf_counter() - time_2, "seconds")
-        time_3 = time.perf_counter()
+
         # Set the tolerance for the matrix approximation
         if hasattr(matrix_circuit, "tolerance"):
             matrix_circuit.tolerance = self._epsilon_a
@@ -395,22 +388,13 @@ class HHL(LinearSolver):
         # Update the number of qubits required to represent the eigenvalues
         # The +neg_vals is to register negative eigenvalues because
         # e^{-2 \pi i \lambda} = e^{2 \pi i (1 - \lambda)}
-        print(nb+1, int(np.ceil(np.log2(kappa + 1))))
-        # if nb + 1 >= int(np.ceil(np.log2(kappa + 1))):
-        #     print('nb + 1 is greater than int(np.ceil(np.log2(kappa + 1)))')
-        #     print('---------------')
-        # else:
-        #     print('nb + 1 is less than int(np.ceil(np.log2(kappa + 1)))')
         nl = max(nb + 1, int(np.ceil(np.log2(kappa + 1)))) + neg_vals
-        print('----------------------------------')
-        print('nl:', nl)
-        print('-------------------------------')
+
         # check if the matrix can calculate bounds for the eigenvalues
         if (
             hasattr(matrix_circuit, "eigs_bounds")
             and matrix_circuit.eigs_bounds() is not None
         ):
-            # print('-----is matrix_circuit.eigs_bounds() is not None')
             lambda_min, lambda_max = matrix_circuit.eigs_bounds()
             # Constant so that the minimum eigenvalue is represented exactly, since it contributes
             # the most to the solution of the system. -1 to take into account the sign qubit
@@ -419,12 +403,11 @@ class HHL(LinearSolver):
             matrix_circuit.evolution_time = (
                 2 * np.pi * delta / lambda_min / (2**neg_vals)
             )
-            # print('------------------------matrix_circuit.evolution_time--------------------:', matrix_circuit.evolution_time)
             # Update the scaling of the solution
             self.scaling = lambda_min
         else:
             delta = 1 / (2**nl)
-            # print("The solution will be calculated up to a scaling factor.")
+            print("The solution will be calculated up to a scaling factor.")
 
         if self._exact_reciprocal:
             reciprocal_circuit = ExactReciprocal(nl, delta, neg_vals=neg_vals)
@@ -470,9 +453,6 @@ class HHL(LinearSolver):
             )
             na = max(matrix_circuit.num_ancillas, reciprocal_circuit.num_ancillas)
 
-        # print("Time taken for reciprocal approximation: ",  time.perf_counter() - time_3, "seconds")
-
-        time_4 = time.perf_counter()
         # Initialise the quantum registers
         qb = QuantumRegister(nb)  # right hand side and solution
         ql = QuantumRegister(nl)  # eigenvalue evaluation qubits
@@ -484,13 +464,10 @@ class HHL(LinearSolver):
             qc = QuantumCircuit(qb, ql, qa, qf)
         else:
             qc = QuantumCircuit(qb, ql, qf)
-        # print("Time taken for initialize quantum registers: ",  time.perf_counter() - time_4, "seconds")
 
-        time_5 = time.perf_counter()
         # State preparation
         qc.append(vector_circuit, qb[:])
         # QPE
-        print(f'-----matrix_circuit_type:{type(matrix_circuit)}')
         phase_estimation = PhaseEstimation(nl, matrix_circuit)
         if na > 0:
             qc.append(
@@ -498,8 +475,6 @@ class HHL(LinearSolver):
             )
         else:
             qc.append(phase_estimation, ql[:] + qb[:])
-        print("Time taken for state preparation and QPE: ",  time.perf_counter() - time_5, "seconds")
-        time_6 = time.perf_counter()
         # Conditioned rotation
         if self._exact_reciprocal:
             qc.append(reciprocal_circuit, ql[::-1] + [qf[0]])
@@ -508,8 +483,6 @@ class HHL(LinearSolver):
                 reciprocal_circuit.to_instruction(),
                 ql[:] + [qf[0]] + qa[: reciprocal_circuit.num_ancillas],
             )
-        print("Time taken for conditioned rotation: ",  time.perf_counter() - time_6, "seconds")
-        time_7 = time.perf_counter()
         # QPE inverse
         if na > 0:
             qc.append(
@@ -518,7 +491,6 @@ class HHL(LinearSolver):
             )
         else:
             qc.append(phase_estimation.inverse(), ql[:] + qb[:])
-        print("Time taken for QPE inverse: ",  time.perf_counter() - time_7, "seconds")
         return qc
 
     def solve(
@@ -537,8 +509,7 @@ class HHL(LinearSolver):
         post_processing: Optional[
             Callable[[Union[float, List[float]], int, float], float]
         ] = None,
-        is_time: Optional[bool] = False,
-        ) -> LinearSolverResult:
+    ) -> LinearSolverResult:
         """Tries to solve the given linear system of equations.
 
         Args:
@@ -567,18 +538,9 @@ class HHL(LinearSolver):
                 )
 
         solution = LinearSolverResult()
-        time_1 = time.perf_counter()
         solution.state = self.construct_circuit(matrix, vector)
-        # solution.state = self.construct_circuit(matrix, vector, neg_vals=False)
-        print('------------------')
-        print("Time taken fhor construct circuit: ", time.perf_counter() - time_1, "seconds")
-        print('------------------')
-        # time_2 = time.perf_counter()
-        # solution.euclidean_norm = self._calculate_norm(solution.state)
-        # print("Time taken for calculate norm: ", time.perf_counter() - time_2, "seconds")
-        # print('------------------')
+        solution.euclidean_norm = self._calculate_norm(solution.state)
 
-        time_3 = time.perf_counter()
         if isinstance(observable, List):
             observable_all, circuit_results_all = [], []
             for obs in observable:
@@ -593,10 +555,5 @@ class HHL(LinearSolver):
             solution.observable, solution.circuit_results = self._calculate_observable(
                 solution.state, observable, observable_circuit, post_processing
             )
-        observation_time = time.perf_counter() - time_3
-        print("Time taken for calculate observable: ", observation_time, "seconds")
 
-        if is_time:
-            return solution, observation_time
-        else:
-            return solution
+        return solution

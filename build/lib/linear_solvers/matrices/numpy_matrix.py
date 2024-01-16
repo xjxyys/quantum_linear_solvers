@@ -196,8 +196,7 @@ class NumPyMatrix(LinearSystemMatrix):
     def inverse(self):
         return NumPyMatrix(self.matrix, evolution_time=-1 * self.evolution_time)
 
-    # def power(self, power: int, matrix_power: bool = False) -> QuantumCircuit:
-    def power(self, power: int, matrix_power: bool = True) -> QuantumCircuit:
+    def power(self, power: int, matrix_power: bool = False) -> QuantumCircuit:
         """Build powers of the circuit.
 
         Args:
@@ -209,13 +208,8 @@ class NumPyMatrix(LinearSystemMatrix):
         Returns:
             The quantum circuit implementing powers of the unitary.
         """
-        import time
-        time_1 = time.perf_counter()
-        # print('--start evolution--')
         qc = QuantumCircuit(self.num_state_qubits)
         evolved = sp.linalg.expm(1j * self.matrix * self.evolution_time)
         # pylint: disable=no-member
         qc.unitary(evolved, qc.qubits)
-        # print('---end evolution---')
-        # print('Time taken for evolution: ', time.perf_counter() - time_1, 'seconds')
         return qc.power(power)
